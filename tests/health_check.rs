@@ -1,14 +1,15 @@
 use std::net::TcpListener;
 
 use newsletter::{
-    configuration::get_configuration,
+    configuration::{get_configuration, DatabaseSettings},
     startup::run,
 };
-use sqlx::{PgPool, Row};
+use sqlx::{Connection, Executor, PgPool, Row};
+use uuid::Uuid;
 
 pub struct TestApp {
     pub address: String,
-    pub db_pool: PgPool
+    pub db_pool: PgPool,
 }
 
 #[tokio::test]
@@ -31,9 +32,16 @@ async fn spawn_app() -> TestApp {
     let port = listener.local_addr().unwrap().port();
     println!("Test Server listening on port {port}");
 
-    let config = get_configuration().unwrap();
+    let mut config = get_configuration().unwrap();
+    config.database.database_name = Uuid::new_v4().to_string();
 
-    let connection_pool = PgPool::connect(&config.database.connection_string()).await.unwrap();
+    println!("db name: {}", &config.database.database_name);
+
+    // let connection_pool = PgPool::connect(&config.database.connection_string())
+    //     .await
+    //     .unwrap();
+
+    let connection_pool = configure_database(&config.database).await;
 
     let server = run(listener, connection_pool.clone()).unwrap();
 
@@ -43,7 +51,7 @@ async fn spawn_app() -> TestApp {
 
     TestApp {
         address,
-        db_pool: connection_pool
+        db_pool: connection_pool,
     }
 }
 
@@ -52,7 +60,6 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     let app = spawn_app().await;
     let client = reqwest::Client::new();
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
-    
 
     let response = client
         .post(format!("{}/subscriptions", &app.address))
@@ -71,9 +78,6 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 
     assert_eq!(saved.get::<&str, _>("email"), "ursula_le_guin@gmail.com");
     assert_eq!(saved.get::<&str, _>("name"), "le guin");
-
-
-    
 }
 
 #[tokio::test]
@@ -103,4 +107,24 @@ async fn subscribe_returns_a_400_for_invalid_form_data() {
             message
         );
     }
+}
+
+pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
+    let mut connection = sqlx::PgConnection::connect(&config.connection_string_without_db())
+        .await
+        .unwrap();
+
+    connection
+        .execute(format!(r#"CREATE DATABASE "{}""#, config.database_name).as_str())
+        .await
+        .unwrap();
+
+    let connection_pool = PgPool::connect(&config.connection_string()).await.unwrap();
+
+    sqlx::migrate!("./migrations")
+        .run(&connection_pool)
+        .await
+        .unwrap();
+
+    connection_pool
 }

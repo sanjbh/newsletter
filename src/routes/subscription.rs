@@ -12,17 +12,12 @@ pub async fn subscribe(
     form: web::Form<FormData>,
     db_pool: web::Data<sqlx::PgPool>,
 ) -> HttpResponse {
-    // sqlx::query!(
-    //     r#"
-    //         INSERT into subscriptions (id, email, name, subscribed_at)
-    //         VALUES ($1, $2, $3, $4)
-    //     "#,
-    //     Uuid::
-    // );
+    log::info!("Saving new subscriber details in the database");
+
     let result = sqlx::query!(
         r#"
-        INSERT INTO subscriptions (id, email, name, subscribed_at)
-        VALUES ($1, $2, $3, $4)
+            INSERT INTO subscriptions (id, email, name, subscribed_at)
+            VALUES ($1, $2, $3, $4)
         "#,
         Uuid::new_v4(),
         form.email,
@@ -33,9 +28,12 @@ pub async fn subscribe(
     .await;
 
     match result {
-        Ok(_) => HttpResponse::Ok().finish(),
+        Ok(_) => {
+            log::info!("New subscriber details have been saved");
+            HttpResponse::Ok().finish()
+        }
         Err(e) => {
-            eprintln!("Failed to execute query : {e}");
+            log::error!("Failed to execute query : {e}");
             // HttpResponse::InternalServerError().finish()
             HttpResponse::InternalServerError().body(format!("Database error: {}", e))
         }
