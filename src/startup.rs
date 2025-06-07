@@ -11,7 +11,7 @@ pub fn run(listener: TcpListener, db_pool: sqlx::PgPool) -> anyhow::Result<Serve
         App::new()
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
-            .app_data(db_pool.clone())
+            .app_data(web::Data::new(db_pool.clone()))
     })
     // .bind(&address)?
     .listen(listener)?

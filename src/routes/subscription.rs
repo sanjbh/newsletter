@@ -1,6 +1,5 @@
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
-use sqlx::PgConnection;
 use uuid::Uuid;
 
 #[derive(serde::Deserialize)]
@@ -20,7 +19,7 @@ pub async fn subscribe(
     //     "#,
     //     Uuid::
     // );
-    match sqlx::query!(
+    let result = sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
         VALUES ($1, $2, $3, $4)
@@ -31,12 +30,14 @@ pub async fn subscribe(
         Utc::now()
     )
     .execute(db_pool.get_ref())
-    .await
-    {
+    .await;
+
+    match result {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => {
             eprintln!("Failed to execute query : {e}");
-            HttpResponse::InternalServerError().finish()
+            // HttpResponse::InternalServerError().finish()
+            HttpResponse::InternalServerError().body(format!("Database error: {}", e))
         }
     }
 }
